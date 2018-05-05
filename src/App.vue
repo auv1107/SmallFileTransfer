@@ -17,7 +17,8 @@
                                     action="">
                                 <i class="el-icon-upload"></i>
                                 <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
-                                <div class="el-upload__tip" slot="tip">只能上传jpg/png文件，且不超过500kb</div>
+                                <div class="el-upload__tip" slot="tip">可上传任意文件，单文件不超过2000kb</div>
+                                <div class="el-upload__tip" slot="tip">只作为小文件临时中转，不保证安全和隐私，请勿上传私密文件</div>
                             </el-upload>
                         </el-tab-pane>
                         <el-tab-pane label="提取文件" name="second">
@@ -33,6 +34,36 @@
                                 clearable>
                             </el-input>
                             <el-button @click="handleDownload">提取</el-button>
+                        </el-tab-pane>
+                        <el-tab-pane label="历史记录" name="third">
+                            <el-table
+                                    :data="tableData"
+                                    style="width: 100%">
+                                <el-table-column
+                                        prop="file"
+                                        label="文件名"
+                                        align="left"
+                                        width="150">
+                                </el-table-column>
+                                <el-table-column
+                                        align="right"
+                                        prop="code"
+                                        label="提取码">
+                                </el-table-column>
+                                <el-table-column
+                                        align="right"
+                                        label="">
+                                    <template slot-scope="scope">
+                                        <el-button
+                                                size="mini"
+                                                @click="handleDownloadRow(scope.row)">提取</el-button>
+                                        <el-button
+                                                size="mini"
+                                                type="danger"
+                                                @click="handleDeleteRow(scope.row)">删除</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
                         </el-tab-pane>
                     </el-tabs>
 
@@ -75,7 +106,8 @@
                 showUpload: true,
                 fileCode: '',
                 tabName: 'first',
-                downloadCode: ''
+                downloadCode: '',
+                tableData: []
             }
         },
         methods: {
@@ -98,6 +130,8 @@
                     console.log(f);
                     that.showUpload = false;
                     that.fileCode = f._qiniu_key.substr(0,5);
+                    saveFileCode(info.file, that.fileCode);
+                    that.reloadTableData();
                 }, function(error) {
                     // 异常处理
                     console.error(error);
@@ -110,22 +144,38 @@
 
             },
             handleDownload() {
-                console.log('download ' + this.downloadCode);
-                var query = new AV.Query('_File');
-                query.startsWith('key', this.downloadCode);
-                query.first().then(data => {
-                    let file = JSON.parse(JSON.stringify(data));
-                    console.log('got data ' + JSON.stringify(file));
-                    let url = file.url;
-                    // window.open(url)
-                    getBlob(url).then(blob => {
-                        saveAs(blob, file.metaData.fileName)
-                    })
-                }, error => {
-                    console.log('error ' + error)
-                })
+                download(this.downloadCode)
+            },
+            handleDownloadRow(row) {
+                download(row.code);
+            },
+            handleDeleteRow(row) {
+                removeCode(row.code);
+                this.reloadTableData();
+            },
+            reloadTableData() {
+                this.tableData = getFileInfoList().reverse();
             }
+        },
+        mounted() {
+            this.reloadTableData();
         }
+    }
+
+    let KEY_FILE_INFO_LIST = "fileInfoList";
+
+    function saveFileCode(file, code) {
+        let fileInfo = {
+            file: file.name,
+            code: code
+        };
+        let fileInfoList = getFileInfoList() || [];
+        fileInfoList.push(fileInfo);
+        localStorage.setItem(KEY_FILE_INFO_LIST, JSON.stringify(fileInfoList));
+    }
+
+    function getFileInfoList() {
+        return JSON.parse(localStorage.getItem(KEY_FILE_INFO_LIST));
     }
 
     /**
@@ -173,6 +223,31 @@
 
             window.URL.revokeObjectURL(link.href);
         }
+    }
+
+    function download(code) {
+        console.log('download ' + code);
+        var query = new AV.Query('_File');
+        query.startsWith('key', code);
+        query.first().then(data => {
+            let file = JSON.parse(JSON.stringify(data));
+            console.log('got data ' + JSON.stringify(file));
+            let url = file.url;
+            // window.open(url)
+            getBlob(url).then(blob => {
+                saveAs(blob, file.metaData.fileName)
+            })
+        }, error => {
+            console.log('error ' + error)
+        })
+    }
+
+    function removeCode(code) {
+        let list = getFileInfoList();
+        list = list.filter((item, i) => {
+            return item.code !== code;
+        });
+        localStorage.setItem(KEY_FILE_INFO_LIST, JSON.stringify(list));
     }
 </script>
 
